@@ -10,10 +10,13 @@ pub use vamm::*;
 
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
+    declare_id,
     entrypoint::ProgramResult,
     program_error::ProgramError,
     pubkey::Pubkey,
 };
+
+declare_id!("MTCPqs6RWWUPMHhvZnnB6BLAXS86TDpTaxQW7Pa3aDh");
 
 // =============================================================================
 // Context Account Layout
