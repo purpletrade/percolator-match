@@ -17,3 +17,7 @@ solana-program = "2.0"
 
 [dev-dependencies]
 # For tests that need std
+
+[patch.crates-io]
+# Pin blake3 to pre-edition2024 version (platform-tools cargo 1.84 can't parse edition2024)
+blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.5.5" }
