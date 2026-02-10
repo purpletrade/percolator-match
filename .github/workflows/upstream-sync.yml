@@ -1,0 +1,83 @@
+name: Check Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new upstream commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: purpletrade/percolator-match
+          LAST_SYNCED_COMMIT: bddac64
+        run: |
+          set -euo pipefail
+
+          echo "Fetching upstream commit history..."
+          COMMITS=$(gh api "repos/${UPSTREAM_REPO}/commits?sha=master&per_page=50" \
+            --jq '.[].sha' 2>/dev/null) || {
+            echo "Failed to fetch upstream commits"
+            exit 0
+          }
+
+          LATEST=$(echo "$COMMITS" | head -1)
+          LATEST_SHORT=$(echo "$LATEST" | cut -c1-7)
+          SYNCED_SHORT=$(echo "$LAST_SYNCED_COMMIT" | cut -c1-7)
+
+          echo "Upstream latest: $LATEST_SHORT"
+          echo "Our last sync:  $SYNCED_SHORT"
+
+          AHEAD=0
+          while IFS= read -r sha; do
+            SHORT=$(echo "$sha" | cut -c1-7)
+            if [[ "$SHORT" == "$SYNCED_SHORT"* ]] || [[ "$sha" == "$LAST_SYNCED_COMMIT"* ]]; then
+              break
+            fi
+            AHEAD=$((AHEAD + 1))
+          done <<< "$COMMITS"
+
+          if [[ $AHEAD -eq 0 ]]; then
+            echo "Up to date with upstream."
+            echo "### ✅ Up to date with upstream" >> "$GITHUB_STEP_SUMMARY"
+            echo "Last synced: \`${LAST_SYNCED_COMMIT}\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Upstream is $AHEAD commits ahead."
+
+          COMMIT_LIST=$(gh api "repos/${UPSTREAM_REPO}/commits?sha=master&per_page=${AHEAD}" \
+            --jq '.[] | "- [`" + (.sha | .[0:7]) + "`](https://github.com/'"${UPSTREAM_REPO}"'/commit/" + .sha + ") " + (.commit.message | split("\n") | .[0])' 2>/dev/null)
+
+          echo "::warning::Upstream has ${AHEAD} new commit(s) since ${SYNCED_SHORT}"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ⚠️ Upstream has $AHEAD new commit(s)
+
+          **Upstream repo:** https://github.com/${UPSTREAM_REPO}
+          **Our last sync:** \`${LAST_SYNCED_COMMIT}\`
+          **Upstream latest:** \`${LATEST_SHORT}\`
+
+          ### New commits
+
+          ${COMMIT_LIST}
+
+          ### Sync checklist
+
+          - [ ] Review upstream changes
+          - [ ] Cherry-pick or merge relevant commits to a sync branch
+          - [ ] If deps changed: update Cargo.toml, regenerate lockfile, re-vendor
+          - [ ] Run CI build on sync branch
+          - [ ] Update \`LAST_SYNCED_COMMIT\` in upstream-sync.yml and CLAUDE.md
+          EOF

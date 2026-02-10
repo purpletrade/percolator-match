@@ -1,0 +1,51 @@
+name: Verified SBF Build (Solana 2.3.x)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Build in verifiable-build image (linux/amd64)
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/work" -w /work \
+            solanafoundation/solana-verifiable-build:2.3.0 \
+            bash -lc '
+              set -euxo pipefail
+
+              # Install cargo if not on PATH (some images omit it)
+              if ! command -v cargo &>/dev/null; then
+                export RUSTUP_HOME=/tmp/rustup CARGO_HOME=/tmp/cargo
+                curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+                export PATH="/tmp/cargo/bin:$PATH"
+              fi
+
+              cargo --version
+              solana --version
+              cargo-build-sbf --version
+              cargo-build-sbf --force-tools-install --sbf-out-dir target/deploy -- --locked
+            '
+
+      - name: Fix permissions and compute SHA256
+        run: |
+          sudo chown -R $(id -u):$(id -g) target/deploy
+          shasum -a 256 target/deploy/percolator_match.so | tee target/deploy/percolator_match.so.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: percolator-match-sbf-2.3.0
+          path: |
+            target/deploy/percolator_match.so
+            target/deploy/percolator_match.so.sha256
