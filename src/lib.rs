@@ -272,6 +272,17 @@ mod entrypoint {
         account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,
     };
 
+    use solana_security_txt::security_txt;
+
+    security_txt! {
+        name: "Purple Percolator Match",
+        project_url: "https://purple.trade",
+        contacts: "email:tradeonpurple@proton.me,link:https://purple.trade/security",
+        policy: "https://purple.trade/security",
+        source_code: "https://github.com/purpletrade/percolator-match",
+        preferred_languages: "en"
+    }
+
     entrypoint!(process_instruction);
 
     fn process_instruction(
